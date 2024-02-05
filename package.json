@@ -1,0 +1,11 @@
+{
+  "name": "airdrop",
+  "version": "1.0.0",
+  "description": "Airdrop of erc-20 tokens using merkle tree and merkle proofs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
