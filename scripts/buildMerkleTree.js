@@ -1,17 +1,19 @@
-import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
-import fs from "fs";
+const { StandardMerkleTree } = require("@openzeppelin/merkle-tree");
+const fs = require("fs");
 
-// (1)
-const values = [
-  ["0x1111111111111111111111111111111111111111", "5000000000000000000"],
-  ["0x2222222222222222222222222222222222222222", "2500000000000000000"]
-];
+var data;
 
-// (2)
-const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
+fs.readFile("WhitelistedUsers.json", "utf8", (err, jsonData) => {
+  if (err) {
+    console.error("Error reading JSON file:", err);
+    return;
+  }
+  data = JSON.parse(jsonData);
+  // console.log("Parsed DATA: \n", data);
 
-// (3)
-console.log('Merkle Root:', tree.root);
+  // Generating Merkle tree with data
+  const tree = StandardMerkleTree.of(data, ["address", "uint256"]);
 
-// (4)
-fs.writeFileSync("tree.json", JSON.stringify(tree.dump()));
+  console.log("Merkle Root:", tree.root);
+  fs.writeFileSync("tree.json", JSON.stringify(tree.dump()));
+});
