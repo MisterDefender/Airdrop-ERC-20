@@ -1,1 +1,0 @@
-# Airdrop Erc20 with Merkle trees
