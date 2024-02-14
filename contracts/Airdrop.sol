@@ -20,48 +20,59 @@ contract Airdrop is Ownable {
     mapping(uint256 airdropID => AirdropInfos) airDrops;
     mapping(uint256 airdropID => mapping(address user => bool isClaimed)) claimStatus;
 
-    event AirdropClaim(uint256 indexed airdropID, uint256 amount, address indexed claimer);
+    event AirdropClaim(uint256 indexed airdropID, address indexed claimer, uint256 amount);
 
-    constructor(address _airdropToken) Ownable(msg.sender) {
-        airdropToken = IERC20(_airdropToken);
+    constructor(IERC20 _airdropToken, address _owner) Ownable(_owner) {
+        airdropToken = _airdropToken;
     }
 
-    function initAirdrop(bytes32 _merkleRoot, uint256 _numberOfUsers, uint256 _amount)
+    /* 
+    @param _numberOfUsers number of users should be same as user addresses feeded in the merkle tree.
+    @param _amount amount should be constant for all users in merkle tree.
+    */
+
+    function init(bytes32 _merkleRoot, uint256 _numberOfUsers, uint256 _amount)
         external
         onlyOwner
         returns (uint256 airdropID)
     {
         require(_merkleRoot != bytes32(0), "Airdrop: Merkle Root should not zero bytes");
         require(_numberOfUsers > 0, "Airdrop: number of users should not zero");
-        airDrops[airdropsCount] =
-            AirdropInfos({merkleRoot: _merkleRoot, numberOfUsers: _numberOfUsers, amount: _amount, startedAt: block.timestamp});
+        airDrops[airdropsCount] = AirdropInfos({
+            merkleRoot: _merkleRoot,
+            numberOfUsers: _numberOfUsers,
+            amount: _amount,
+            startedAt: block.timestamp
+        });
         airdropID = airdropsCount;
+        airdropsCount++;
     }
 
-    function reviseAirdropToken(address _airdropToken) external onlyOwner {
-        require(_airdropToken != address(0), "Airdrop: Token should not zero address");
-        airdropToken = IERC20(_airdropToken);
+    function revise(IERC20 _airdropToken) external onlyOwner {
+        require(address(_airdropToken) != address(0), "Airdrop: Token should not zero address");
+        airdropToken = _airdropToken;
     }
 
-    function checkTokenAvailability(uint256 airdropID) internal view returns (bool isAvailable) {
+    function checkAvailability(uint256 airdropID) internal view returns (bool isAvailable) {
         AirdropInfos memory airdropInExecution = airDrops[airdropID];
         uint256 expectedBalanceToAirdrop = airdropInExecution.amount * airdropInExecution.numberOfUsers;
-        isAvailable = airdropToken.balanceOf(address(this)) >= expectedBalanceToAirdrop ? true : false;
+        isAvailable = airdropToken.balanceOf(address(this)) >= expectedBalanceToAirdrop;
     }
 
-    function claimTokens(bytes32[] memory _proof, uint256 airdropID) external {
+    function claim(bytes32[] memory _proof, uint256 airdropID) external {
         address claimer = msg.sender;
-        AirdropInfos storage airdropInExecution = airDrops[airdropID];
+        AirdropInfos memory airdropInExecution = airDrops[airdropID];
         require(!claimStatus[airdropID][claimer], "Airdrop: User already claimed");
-        require(checkTokenAvailability(airdropID), "Airdrop: token balance low to initiate airdrop claim");
+        require(checkAvailability(airdropID), "Airdrop: token balance low to initiate airdrop claim");
         require(
             verify(_proof, claimer, airdropInExecution.amount, airdropID),
             "Airdrop: Invalid prrof submitted while claiming airdrop"
         );
         claimStatus[airdropID][claimer] = true;
+        airDrops[airdropID].numberOfUsers -= 1;
         bool success = airdropToken.transfer(claimer, airdropInExecution.amount);
         require(success, "Airdrop: Token transfer failed");
-        emit AirdropClaim(airdropID, airdropInExecution.amount, claimer);
+        emit AirdropClaim(airdropID, claimer, airdropInExecution.amount);
     }
 
     function verify(bytes32[] memory merkleProof, address account, uint256 amount, uint256 airdropId)
