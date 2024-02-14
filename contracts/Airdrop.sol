@@ -21,6 +21,8 @@ contract Airdrop is Ownable {
     mapping(uint256 airdropID => mapping(address user => bool isClaimed)) claimStatus;
 
     event AirdropClaim(uint256 indexed airdropID, address indexed claimer, uint256 amount);
+    event AirdropInit(uint256 indexed airdropID, uint256 indexed initAt, uint256 amount);
+    event AirdropTokenRevised(address indexed oldToken, address indexed newToken);
 
     constructor(IERC20 _airdropToken, address _owner) Ownable(_owner) {
         airdropToken = _airdropToken;
@@ -46,11 +48,26 @@ contract Airdrop is Ownable {
         });
         airdropID = airdropsCount;
         airdropsCount++;
+        emit AirdropInit(airdropID, block.timestamp, _amount);
     }
 
     function revise(IERC20 _airdropToken) external onlyOwner {
-        require(address(_airdropToken) != address(0), "Airdrop: Token should not zero address");
+        address newToken = address(_airdropToken)
+        require(newToken != address(0), "Airdrop: Token should not zero address");
+        address oldToken = address(airdropToken);
         airdropToken = _airdropToken;
+        emit AirdropTokenRevised(oldToken, newToken);
+    }
+
+    function withdrawTokens(uint256 _amount, address _receiver) external onlyOwner {
+        require(_amount > 0 && airdropToken.balanceOf(address(this)) >= _amount, "Invalid balance of token to withdraw");
+        bool success = airdropToken.transfer(_receiver, _amount);
+        require(success, "Airdrop: token transfer failed while withdrawal");
+    }
+
+    function getAirdropInfo(uint256 _airdropID) public view returns (AirdropInfos memory info) {
+        require(_airdropID > 0 && _airdropID <= airdropsCount, "Airdrop: invalid airdrop ID");
+        info = airDrops[_airdropID];
     }
 
     function checkAvailability(uint256 airdropID) internal view returns (bool isAvailable) {
