@@ -1,7 +1,10 @@
+<center>
+
 # :parachute: Airdrop Contract :parachute:
 ---
-
 This Solidity smart contract implements an airdrop functionality for distributing tokens to multiple users based on a Merkle tree. Users can claim their portion of tokens by providing a valid Merkle proof.
+
+</center>
 
 ## Features
 
@@ -9,13 +12,16 @@ This Solidity smart contract implements an airdrop functionality for distributin
 - **Token Revision**: Owner can update the token contract address if needed.
 - **Claim**: Users can claim their tokens by providing a valid Merkle proof.
 
-## Getting Started :rocket:	
+## Getting Started :rocket:
 
 1. Deploy the contract to the Ethereum blockchain.
+   1. Ensure you have a `.env` file with the following variables:
+      1. `ARB_SEPOLIA_API_KEY`=<Your_Arb_Sepolia_Alchemy_Node_API_Key>
+      2. `AIRDROP_CONTRACT_OWNER_PRIVATE_KEY`=<Airdrop_Contract_Owner_Private_Key>
+   2. Run `shell npx hardhat deploy --network arbSepolia`
 2. Initialize a new airdrop using the `init` function.
 3. Distribute the tokens to the contract address.
 4. Users can claim their tokens using the `claim` function.
-
 
 ## Usage
 
@@ -31,9 +37,8 @@ Update the token contract address.
 
 Claim tokens by providing a valid Merkle proof.
 
-## Notes :brain:	
+## Notes :brain:
 
 - Ensure that enough tokens are deposited to the contract address before users claim their tokens.
 - Users cannot claim tokens multiple times in same airdrop.
 - Ensure the validity of Merkle proofs before processing claims.
-
