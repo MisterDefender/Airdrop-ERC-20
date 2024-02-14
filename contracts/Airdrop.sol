@@ -34,7 +34,7 @@ contract Airdrop is Ownable {
         require(_merkleRoot != bytes32(0), "Airdrop: Merkle Root should not zero bytes");
         require(_numberOfUsers > 0, "Airdrop: number of users should not zero");
         airDrops[airdropsCount] =
-            AirdropInfos({merkleRoot: _merkleRoot, numberOfUsers: _numberOfUsers, amount: _amount, startedAt: 0});
+            AirdropInfos({merkleRoot: _merkleRoot, numberOfUsers: _numberOfUsers, amount: _amount, startedAt: block.timestamp});
         airdropID = airdropsCount;
     }
 
@@ -59,7 +59,6 @@ contract Airdrop is Ownable {
             "Airdrop: Invalid prrof submitted while claiming airdrop"
         );
         claimStatus[airdropID][claimer] = true;
-        airdropInExecution.startedAt = block.timestamp;
         bool success = airdropToken.transfer(claimer, airdropInExecution.amount);
         require(success, "Airdrop: Token transfer failed");
         emit AirdropClaim(airdropID, airdropInExecution.amount, claimer);
