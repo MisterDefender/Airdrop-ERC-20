@@ -4,12 +4,17 @@
   "description": "Airdrop of erc-20 tokens using merkle tree and merkle proofs",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "npx hardhat compile",
+    "arbSepolia:deploy": "hardhat --network arbSepolia deploy",
+    "arbSepolia:verify": "hardhat --network arbSepolia etherscan-verify --solc-input",
+    "arbSepolia:export": "hardhat --network arbSepolia export --export exports/arbSepolia.json",
+    "hardhat:deploy": "hardhat --network hardhat deploy"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.4",
     "hardhat": "^2.19.5",
     "hardhat-deploy": "^0.11.45"
   },
