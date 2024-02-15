@@ -1,5 +1,6 @@
+const { ethers } = require("hardhat");
+
 module.exports = async function ({
-  ethers,
   getNamedAccounts,
   deployments,
   getChainId,
@@ -7,8 +8,8 @@ module.exports = async function ({
   const { deploy } = deployments;
   const { deployer } = await getNamedAccounts();
   const owner = deployer;
-  const initialSupply = ethers.utils.parseEther("1000");
-  
+  const initialSupply = ethers.parseEther("1000");
+
   const airdropToken = await deploy("AirdropToken", {
     from: deployer,
     args: [owner, initialSupply],
