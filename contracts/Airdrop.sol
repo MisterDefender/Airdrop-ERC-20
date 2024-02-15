@@ -10,32 +10,32 @@ import "@openzeppelin/contracts/access/Ownable2Step.sol";
 contract Airdrop is Ownable2Step {
     using SafeERC20 for IERC20;
 
-    IERC20 public airdropToken;
-    uint256 internal airdropsCount = 1;
-    uint256 thresholdBalance;
-    uint256 constant CLAIM_START_DURATION = 5 days; // claim start after 5 days of init airdrop
-
     struct AirdropInfos {
         bytes32 merkleRoot;
         uint256 numberOfUsers;
         uint256 startedAt;
     }
 
-    mapping(uint256 airdropID => AirdropInfos) airDrops;
-    mapping(uint256 airdropID => mapping(address user => bool isClaimed)) claimStatus;
+    uint256 public constant CLAIM_START_DURATION = 5 days; // claim start after 5 days of init airdrop
+    uint256 internal airdropsCount = 1;
+    uint256 internal thresholdBalance;
+    IERC20 public airdropToken;
 
-    event AirdropClaim(uint256 indexed airdropID, address indexed claimer, uint256 amount);
-    event AirdropInit(uint256 indexed airdropID, uint256 indexed initAt, uint256 amount);
-    event AirdropTokenRevised(address indexed oldToken, address indexed newToken);
-    event ThresholdUpdated(uint256 indexed oldThreshold, uint256 indexed newThreshold);
-    event ThresholdReached(uint256 indexed balance, uint256 threshold, string info);
+    mapping(uint256 airdropID => mapping(address user => bool isClaimed)) internal claimStatus;
+    mapping(uint256 airdropID => AirdropInfos) public airDrops;
+
+    event AirdropClaim(uint256 indexed airdropID, address claimer, uint256 amount);
+    event AirdropInit(uint256 indexed airdropID, uint256 initAt, uint256 claimStartAt);
+    event AirdropTokenRevised(address newToken);
+    event ThresholdUpdated(uint256 oldThreshold, uint256 newThreshold);
+    event ThresholdReached(uint256 balance, uint256 threshold);
 
     constructor(IERC20 _airdropToken, address _owner, uint256 _thresholdTokenAmount) Ownable(_owner) {
         airdropToken = _airdropToken;
         thresholdBalance = _thresholdTokenAmount;
     }
 
-    function init(bytes32 _merkleRoot, uint256 _numberOfUsers, uint256 _amount)
+    function init(bytes32 _merkleRoot, uint256 _numberOfUsers)
         external
         onlyOwner
         returns (uint256 airdropID)
@@ -46,15 +46,13 @@ contract Airdrop is Ownable2Step {
             AirdropInfos({merkleRoot: _merkleRoot, numberOfUsers: _numberOfUsers, startedAt: block.timestamp});
         airdropID = airdropsCount;
         airdropsCount++;
-        emit AirdropInit(airdropID, block.timestamp, _amount);
+        emit AirdropInit(airdropID, block.timestamp, block.timestamp + CLAIM_START_DURATION);
     }
 
     function revise(IERC20 _airdropToken) external onlyOwner {
-        address newToken = address(_airdropToken);
-        require(newToken != address(0), "Airdrop: Token should not zero address");
-        address oldToken = address(airdropToken);
+        require(address(_airdropToken) != address(0), "Airdrop: Token should not zero address");
         airdropToken = _airdropToken;
-        emit AirdropTokenRevised(oldToken, newToken);
+        emit AirdropTokenRevised(address(_airdropToken));
     }
 
     function updateThresholdAmount(uint256 _threshold) external onlyOwner {
@@ -65,40 +63,21 @@ contract Airdrop is Ownable2Step {
 
     function withdrawTokens(uint256 _amount, address _receiver) external onlyOwner {
         require(_amount > 0 && airdropToken.balanceOf(address(this)) >= _amount, "Invalid balance of token to withdraw");
-        bool success = airdropToken.transfer(_receiver, _amount);
-        require(success, "Airdrop: token transfer failed while withdrawal");
-    }
-
-    function getAirdropInfo(uint256 _airdropID) public view returns (AirdropInfos memory info) {
-        require(_airdropID > 0 && _airdropID <= airdropsCount, "Airdrop: invalid airdrop ID");
-        info = airDrops[_airdropID];
-    }
-
-    function isThresholdReached(uint256 _amount) public returns (bool _isReached) {
-        uint256 balance = airdropToken.balanceOf(address(this));
-        if (balance <= thresholdBalance) {
-            uint256 diff = balance - _amount;
-            _isReached = (diff <= 5); // atleast hold 5 airdrop tokens.
-            emit ThresholdReached(balance, thresholdBalance, "Top-up the airdrop token");
-        }
+        airdropToken.safeTransfer(_receiver, _amount);
     }
 
     // NOTE: user needs to put full claimable amount in _amount, since they have only one chance to claim the amount
     function claim(bytes32[] memory _proof, uint256 airdropID, uint256 _amount) external {
         address claimer = msg.sender;
         AirdropInfos memory airdropInExecution = airDrops[airdropID];
-        require(
-            block.timestamp > airdropInExecution.startedAt + CLAIM_START_DURATION,
-            string(
-                abi.encodePacked(
-                    "Airdrop: Not yet started to claim. Wait for ",
-                    (CLAIM_START_DURATION + airdropInExecution.startedAt) - block.timestamp,
-                    " seconds"
-                )
-            )
-        );
+        require(block.timestamp > airdropInExecution.startedAt + CLAIM_START_DURATION, "Airdrop: Claim not started");
+
         require(!claimStatus[airdropID][claimer], "Airdrop: User already claimed");
-        require(!isThresholdReached(_amount), "Airdrop: Threshold reached");
+        uint256 balance = airdropToken.balanceOf(address(this));
+        if (balance <= thresholdBalance) {
+            emit ThresholdReached(balance, thresholdBalance);
+            revert("Token balance low to transfer");
+        }
         require(
             verify(_proof, airdropInExecution.merkleRoot, claimer, _amount),
             "Airdrop: Invalid prrof submitted while claiming airdrop"
