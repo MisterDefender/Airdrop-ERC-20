@@ -5,16 +5,20 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Airdrop is Ownable {
+    using SafeERC20 for IERC20;
+
     IERC20 public airdropToken;
     uint256 internal airdropsCount = 1;
+    uint256 thresholdBalance;
+    uint256 constant CLAIM_START_DURATION = 5 days; // claim start after 5 days of init airdrop
 
     struct AirdropInfos {
         bytes32 merkleRoot;
         uint256 numberOfUsers;
         uint256 startedAt;
-        uint256 amount;
     }
 
     mapping(uint256 airdropID => AirdropInfos) airDrops;
@@ -23,15 +27,13 @@ contract Airdrop is Ownable {
     event AirdropClaim(uint256 indexed airdropID, address indexed claimer, uint256 amount);
     event AirdropInit(uint256 indexed airdropID, uint256 indexed initAt, uint256 amount);
     event AirdropTokenRevised(address indexed oldToken, address indexed newToken);
+    event ThresholdUpdated(uint256 indexed oldThreshold, uint256 indexed newThreshold);
+    event ThresholdReached(uint256 indexed balance, uint256 threshold, string info);
 
-    constructor(IERC20 _airdropToken, address _owner) Ownable(_owner) {
+    constructor(IERC20 _airdropToken, address _owner, uint256 _thresholdTokenAmount) Ownable(_owner) {
         airdropToken = _airdropToken;
+        thresholdBalance = _thresholdTokenAmount;
     }
-
-    /* 
-    @param _numberOfUsers number of users should be same as user addresses feeded in the merkle tree.
-    @param _amount amount should be constant for all users in merkle tree.
-    */
 
     function init(bytes32 _merkleRoot, uint256 _numberOfUsers, uint256 _amount)
         external
@@ -40,23 +42,25 @@ contract Airdrop is Ownable {
     {
         require(_merkleRoot != bytes32(0), "Airdrop: Merkle Root should not zero bytes");
         require(_numberOfUsers > 0, "Airdrop: number of users should not zero");
-        airDrops[airdropsCount] = AirdropInfos({
-            merkleRoot: _merkleRoot,
-            numberOfUsers: _numberOfUsers,
-            amount: _amount,
-            startedAt: block.timestamp
-        });
+        airDrops[airdropsCount] =
+            AirdropInfos({merkleRoot: _merkleRoot, numberOfUsers: _numberOfUsers, startedAt: block.timestamp});
         airdropID = airdropsCount;
         airdropsCount++;
         emit AirdropInit(airdropID, block.timestamp, _amount);
     }
 
     function revise(IERC20 _airdropToken) external onlyOwner {
-        address newToken = address(_airdropToken)
+        address newToken = address(_airdropToken);
         require(newToken != address(0), "Airdrop: Token should not zero address");
         address oldToken = address(airdropToken);
         airdropToken = _airdropToken;
         emit AirdropTokenRevised(oldToken, newToken);
+    }
+
+    function updateThresholdAmount(uint256 _threshold) external onlyOwner {
+        uint256 oldThreshold = thresholdBalance;
+        thresholdBalance = _threshold;
+        emit ThresholdUpdated(oldThreshold, _threshold);
     }
 
     function withdrawTokens(uint256 _amount, address _receiver) external onlyOwner {
@@ -70,37 +74,48 @@ contract Airdrop is Ownable {
         info = airDrops[_airdropID];
     }
 
-    function checkAvailability(uint256 airdropID) internal view returns (bool isAvailable) {
-        AirdropInfos memory airdropInExecution = airDrops[airdropID];
-        uint256 expectedBalanceToAirdrop = airdropInExecution.amount * airdropInExecution.numberOfUsers;
-        isAvailable = airdropToken.balanceOf(address(this)) >= expectedBalanceToAirdrop;
+    function isThresholdReached(uint256 _amount) public returns (bool _isReached) {
+        uint256 balance = airdropToken.balanceOf(address(this));
+        if (balance <= thresholdBalance) {
+            uint256 diff = balance - _amount;
+            _isReached = (diff <= 5); // atleast hold 5 airdrop tokens.
+            emit ThresholdReached(balance, thresholdBalance, "Top-up the airdrop token");
+        }
     }
 
-    function claim(bytes32[] memory _proof, uint256 airdropID) external {
+    // NOTE: user needs to put full claimable amount in _amount, since they have only one chance to claim the amount
+    function claim(bytes32[] memory _proof, uint256 airdropID, uint256 _amount) external {
         address claimer = msg.sender;
         AirdropInfos memory airdropInExecution = airDrops[airdropID];
-        require(!claimStatus[airdropID][claimer], "Airdrop: User already claimed");
-        require(checkAvailability(airdropID), "Airdrop: token balance low to initiate airdrop claim");
         require(
-            verify(_proof, claimer, airdropInExecution.amount, airdropID),
+            block.timestamp > airdropInExecution.startedAt + CLAIM_START_DURATION,
+            string(
+                abi.encodePacked(
+                    "Airdrop: Not yet started to claim. Wait for ",
+                    (CLAIM_START_DURATION + airdropInExecution.startedAt) - block.timestamp,
+                    " seconds"
+                )
+            )
+        );
+        require(!claimStatus[airdropID][claimer], "Airdrop: User already claimed");
+        require(!isThresholdReached(_amount), "Airdrop: Threshold reached");
+        require(
+            verify(_proof, airdropInExecution.merkleRoot, claimer, _amount),
             "Airdrop: Invalid prrof submitted while claiming airdrop"
         );
         claimStatus[airdropID][claimer] = true;
-        airDrops[airdropID].numberOfUsers -= 1;
-        bool success = airdropToken.transfer(claimer, airdropInExecution.amount);
-        require(success, "Airdrop: Token transfer failed");
-        emit AirdropClaim(airdropID, claimer, airdropInExecution.amount);
+        airdropToken.safeTransfer(claimer, _amount);
+        emit AirdropClaim(airdropID, claimer, _amount);
     }
 
-    function verify(bytes32[] memory merkleProof, address account, uint256 amount, uint256 airdropId)
+    function verify(bytes32[] memory merkleProof, bytes32 merkleRoot, address account, uint256 amount)
         internal
-        view
+        pure
         returns (bool _isVerified)
     {
         require(merkleProof.length != 0, "Airdrop: Merkle Proof should not be zero length");
         require(account != address(0) && amount > 0, "Airdrop: Zero address & amount is not allowed");
-        AirdropInfos memory airdropInExecution = airDrops[airdropId];
         bytes32 leafNode = keccak256(bytes.concat(keccak256(abi.encode(account, amount))));
-        _isVerified = MerkleProof.verify(merkleProof, airdropInExecution.merkleRoot, leafNode);
+        _isVerified = MerkleProof.verify(merkleProof, merkleRoot, leafNode);
     }
 }

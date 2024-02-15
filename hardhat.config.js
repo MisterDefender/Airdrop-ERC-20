@@ -1,6 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("hardhat-deploy");
 require("dotenv").config();
+require("@nomicfoundation/hardhat-verify");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -29,5 +30,20 @@ module.exports = {
       live: true,
       gasMultiplier: 2,
     },
+  },
+  etherscan: {
+    apiKey: {
+      arbitrumSepolia: process.env.ARBISCAN_API_KEY,
+    },
+    customChains: [
+      {
+        network: "arbitrumSepolia",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io/",
+        },
+      },
+    ],
   },
 };
