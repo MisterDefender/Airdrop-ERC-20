@@ -2,8 +2,9 @@ const { StandardMerkleTree } = require("@openzeppelin/merkle-tree");
 const fs = require("fs");
 
 var data;
-
-fs.readFile("WhitelistedUsers.json", "utf8", (err, jsonData) => {
+const jsonFile = "MockUserData.json"; //  for mock users
+// const jsonFile = "WhitelistedUsers.json"; // for actual users
+fs.readFile(jsonFile, "utf8", (err, jsonData) => {
   if (err) {
     console.error("Error reading JSON file:", err);
     return;
